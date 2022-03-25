@@ -1,0 +1,253 @@
+---
+title: "Final project"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## do clustering first and then run the logit model in each of these clusters
+## run all on excel
+## try different clusters years
+##  The accuracy is 0.306 for the simple baseline model.
+
+```{r}
+
+# Clear All Variables & Clear the Screen
+rm(list=ls())
+cat("\014")
+
+data = read.csv("~/Desktop/MSBA/Operations_Research/Final/2018_Financial_Data.csv")
+
+# Creating Training and Testing Sets
+library(caTools)
+library(tidyr)
+attach(data)
+data <- data %>% drop_na(Class)
+
+set.seed(1234)
+names(data[2:50])
+
+split = sample.split(data$Class, SplitRatio = 0.7)
+Train = subset(data, split==TRUE)
+Test = subset(data, split==FALSE)
+
+#creating the baseline 
+1-(sum(Test$Class)/nrow(Test)) 
+```
+
+ii) The logistic regression predicts whether the stock belongs to class 1, which are stocks that one should buy at the start of year 2019, and sell at the end of year 2019. The predictor variables are hand picked. All of the independent variables are not significant at an at least 95% confidence level except the following variables: INSERT answer  
+
+
+```{r}
+
+# Building a Logistic Regression Model
+
+classLog = glm(Class ~ Revenue + Revenue.Growth + Cost.of.Revenue + Gross.Profit + R.D.Expenses+SG.A.Expense + Operating.Expenses + Operating.Income + Interest.Expense + Earnings.before.Tax + Income.Tax.Expense + grossProfitMargin + operatingCashFlowPerShare + capitalExpenditureCoverageRatios + Other.Liabilities + Depreciation...Amortization + pretaxProfitMargin + effectiveTaxRate + netProfitMargin + niperEBT + dividendPayoutRatio + priceBookValueRatio + priceSalesRatio + priceFairValue , data = Train, family=binomial)
+
+
+cor(Train[c( "Revenue" , "Revenue.Growth" , "Cost.of.Revenue" , "Gross.Profit" , "R.D.Expenses","SG.A.Expense" , "Operating.Expenses" , "Operating.Income" , "Interest.Expense" , "Earnings.before.Tax" , "Income.Tax.Expense" , "grossProfitMargin" , "operatingCashFlowPerShare" , "capitalExpenditureCoverageRatios" , "Other.Liabilities" ,"Depreciation...Amortization" , "pretaxProfitMargin" ,"effectiveTaxRate" , "netProfitMargin" , "niperEBT" ,"dividendPayoutRatio" , "priceBookValueRatio", "priceSalesRatio" , "priceFairValue" )])
+
+summary(classLog)
+
+
+```
+
+iv) The accuracy is 0.779 of the logistic regression model on the test set using a threshold of 0.5. This is greater than the baseline model of 0.31
+```{r}
+
+Test$PredictedRisk = predict(classLog, type="response", newdata = Test)
+
+accuracytable <- table(Test$Class, Test$PredictedRisk > 0.5)
+
+sum(diag(accuracytable))/sum(accuracytable)
+ 
+
+```
+v. The AUC is 0.668. With the model, the investor can learn which predictor variables is statistically significantly associated with the class of the stock. The investor can also rank stocks in the order of risk, and invest in those that are more favorable.
+
+```{r}
+library(ROCR)
+#comparing the predicted one to the actual
+Test <- Test %>% drop_na(PredictedRisk)
+
+ROCRpred = prediction(Test$PredictedRisk, Test$Class)
+#true positive rate (sensitivity) and fpr is false positive rate 
+ROCCurve = performance(ROCRpred, "tpr", "fpr")
+
+#plotting again and adding in the thresholds. seq create thresholds from 0 to 1 in increments of 0.1
+#text.adj is to create the text not to be on the line 
+plot(ROCCurve, colorize=TRUE, print.cutoffs.at=seq(0,1,0.1), text.adj=c(-0.2,0.7))
+```
+
+```{r}
+
+as.numeric(performance(ROCRpred, "auc")@y.values) # AUC value
+```
+
+iv)  The average profit is 2,055,212,193 dollars (2 billion), and the proportion of stocks with price sales ratio higher than the median that were in class 1 is 0.8385. 
+```{r}
+library(dplyr)
+summary(priceSalesRatio)
+HighInterest <- Test %>% filter(priceSalesRatio >= 1.764)
+mean(HighInterest$Gross.Profit)
+
+
+```
+
+```{r}
+
+table <- table(HighInterest$Class == 1)
+1-(table[1]/sum(table))
+
+```
+
+
+v) The profit of an investor in each of these stocks that had a higher than median price sales ratio, 67,314,597,074 (67 billion). 24 of these stocks were not in class 1. Compared to the simple strategy of investing in all stocks, the profit is a lot greater because the investor is choosing loans that maximize return while minimizing risk. 
+```{r}
+
+target <- sort(HighInterest$PredictedRisk, decreasing=FALSE)[100]
+Selected <- subset(HighInterest, HighInterest$PredictedRisk <= target)
+#profit of the investor, who invested $1 in each of these 100 loans
+sum(Selected$Gross.Profit)
+
+
+
+```
+
+```{r}
+
+table(Selected$Class == 0)
+
+```
+## CART
+ 
+Accuracy of the testing set of a simple baseline model is 0.53.
+
+```{r}
+
+library(caTools)
+library(rpart)
+library(rpart.plot)
+ 
+```
+
+
+i. Same variables as the model above are added to the tree.
+
+```{r}
+model <- rpart(Class ~ Revenue + Revenue.Growth + Cost.of.Revenue + Gross.Profit + R.D.Expenses+SG.A.Expense + Operating.Expenses + Operating.Income + Interest.Expense + Earnings.before.Tax + Income.Tax.Expense + grossProfitMargin + operatingCashFlowPerShare + capitalExpenditureCoverageRatios + Other.Liabilities + Depreciation...Amortization + pretaxProfitMargin + effectiveTaxRate + netProfitMargin + niperEBT + dividendPayoutRatio + priceBookValueRatio + priceSalesRatio + priceFairValue  , data=Train, method="class",minbucket=25 )
+model$variable.importance
+
+prp(model)
+
+Predict = predict(model, newdata=Test, type="class") # automatically assumes threshold = 0.5 and directly predicts 0 or 1
+
+```
+ii. The accuracy of the model on the test set is 0.782, which is greater than the baseline model.
+
+```{r}
+
+acc <- table(Test$Class, Predict)
+
+sum(diag(acc))/sum(acc)
+
+
+```
+
+
+
+## K means
+
+
+```{r}
+# Normalization
+library(caret)
+data <- data %>% drop_na(Revenue , Revenue.Growth , Cost.of.Revenue , Gross.Profit , R.D.Expenses,SG.A.Expense , Operating.Expenses , Operating.Income , Interest.Expense , Earnings.before.Tax )
+
+data2<-(data[c( "Revenue" , "Revenue.Growth" , "Cost.of.Revenue" , "Gross.Profit" , "R.D.Expenses","SG.A.Expense" , "Operating.Expenses" , "Operating.Income" , "Interest.Expense" , "Earnings.before.Tax" )])
+#creates the mean and standard deviation of each of hte variables
+preproc = preProcess(data2)
+#now you want to normalize it. subtract out the mean for each variable and divide by the standard deviation
+
+ClusterNorm = predict(preproc, data2)
+
+sapply(ClusterNorm, mean)
+sapply(ClusterNorm, sd)
+```
+
+## Question B
+i)
+
+```{r}
+# K-means clustering
+#initial assignment of the cluster
+
+KmeansClustering = kmeans(ClusterNorm, centers = 5)
+
+# Examination of results
+table(KmeansClustering$cluster)
+
+```
+ii) 
+Explain how clusters are different HERE
+
+```{r}
+
+
+data2 %>% group_by(KmeansClustering$cluster) %>% summarise_all(funs(mean))
+
+library(ggplot2)
+ggplot(data = data2, aes(x= Revenue, y = KmeansClustering$cluster)) + geom_point()
+ggplot(data = hubway, aes(x= Cost.of.Revenue, y = KmeansClustering$cluster)) + geom_point()
+
+ 
+```
+
+ 
+ 
+
+```{r}
+ 
+
+Dist = dist(data2[1:4], method = "euclidean")
+# Alternative methods include "maximum" and 
+# "manhattan" (different distance metrics)
+
+# Compute the hierarchical clusters.  
+HC = hclust(Dist, method = "ward.D")
+
+# Plot a dendrogram
+plot(HC)
+# This diagram will help us decide how many
+# clusters are appropriate for this problem.
+# The height of the vertical lines represents
+# the distance between the points that were 
+# combined into clusters. The record numbers
+# are listed among the bottom (usually hard to
+# see). The taller the lines, the more likely
+# it is that clusters should be separate. Two
+# or three clusters would be appropriate here.
+
+# Plot rectangles around the clusters to aid
+# in visualization
+rect.hclust(HC, k = 3, border = "red")
+
+# Now, split the data into these three clusters
+HC.Groups = cutree(HC, k = 3)
+# IrisHCGroups is now a vector assigning each
+# data point to a cluster
+
+# Use a table to look at the properties of each 
+# of the clusters.
+table(data2$Revenue, HC.Groups)
+tapply(data2$Revenue, HC.Groups, mean)
+tapply(data2$, HC.Groups, mean)
+# Using tapply for the means of each of the 
+# attributes will give us the centroids of the
+# clusters.
+```
